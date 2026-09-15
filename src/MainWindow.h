@@ -10,6 +10,7 @@ class QLabel;
 class QMenu;
 class QDragEnterEvent;
 class QDropEvent;
+class QShowEvent;
 
 class MainWindow : public QMainWindow
 {
@@ -20,6 +21,7 @@ public:
     bool openPath(const QString& path);
 
 protected:
+    void showEvent(QShowEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -66,4 +68,6 @@ private:
     QMenu* m_viewMenu = nullptr;
     QMenu* m_langMenu = nullptr;
     QMenu* m_helpMenu = nullptr;
+
+    bool m_didLaunchPrompts = false;
 };

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Flip VERSION 1.0.0 LANGUAGES CXX)
+project(Flip VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,11 +10,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-find_package(Qt6 6.2 QUIET COMPONENTS Widgets Gui)
+find_package(Qt6 6.2 QUIET COMPONENTS Widgets Gui Network)
 if(Qt6_FOUND)
     set(FLIP_QT Qt6)
 else()
-    find_package(Qt5 5.15 REQUIRED COMPONENTS Widgets Gui)
+    find_package(Qt5 5.15 REQUIRED COMPONENTS Widgets Gui Network)
     set(FLIP_QT Qt5)
     message(STATUS "Qt 6 not found; falling back to Qt ${Qt5_VERSION}")
 endif()
@@ -27,6 +27,9 @@ set(FLIP_SOURCES
     src/FolderPager.cpp
     src/ImageView.cpp
     src/MainWindow.cpp
+    src/UpdateFeed.cpp
+    src/DownloadRace.cpp
+    src/LaunchPrompts.cpp
     src/SelfTest.cpp
     resources/flip.qrc
 )
@@ -38,7 +41,7 @@ else()
 endif()
 
 target_include_directories(Flip PRIVATE src)
-target_link_libraries(Flip PRIVATE ${FLIP_QT}::Widgets ${FLIP_QT}::Gui)
+target_link_libraries(Flip PRIVATE ${FLIP_QT}::Widgets ${FLIP_QT}::Gui ${FLIP_QT}::Network)
 target_compile_definitions(Flip PRIVATE
     FLIP_VERSION="${PROJECT_VERSION}"
     FLIP_QT_MAJOR=$<IF:$<BOOL:${Qt6_FOUND}>,6,5>

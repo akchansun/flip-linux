@@ -3,6 +3,7 @@
 #include "AppInfo.h"
 #include "I18n.h"
 #include "ImageView.h"
+#include "LaunchPrompts.h"
 
 #include <QActionGroup>
 #include <QApplication>
@@ -22,8 +23,10 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QSettings>
+#include <QShowEvent>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTimer>
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -329,7 +332,7 @@ void MainWindow::showAbout()
     dialog.setWindowTitle(I18n::t("about.title"));
     dialog.setModal(true);
     auto* layout = new QVBoxLayout(&dialog);
-    auto* label = new QLabel(I18n::t("about.body"), &dialog);
+    auto* label = new QLabel(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)), &dialog);
     label->setTextFormat(Qt::RichText);
     label->setOpenExternalLinks(true);
     label->setWordWrap(true);
@@ -348,6 +351,16 @@ void MainWindow::restoreGeometryFromSettings()
     const QByteArray geo = settings.value(QStringLiteral("geometry")).toByteArray();
     if (!geo.isEmpty())
         restoreGeometry(geo);
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    if (m_didLaunchPrompts)
+        return;
+    m_didLaunchPrompts = true;
+    // After the window is up so a CLI image path can paint first; tips then async update.
+    QTimer::singleShot(0, this, [this] { runLaunchPrompts(this); });
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

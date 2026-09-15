@@ -43,11 +43,31 @@ QHash<QString, QString> zhTable()
         {"about.title", QStringLiteral("关于 看图")},
         {"about.body",
          QStringLiteral(
-             "<p><b>看图</b>（Flip）是面向办公场景的轻量看图软件：打开一张图片，即可用方向键在"
+             "<p><b>看图</b>（Flip）版本 %1</p>"
+             "<p>面向办公场景的轻量看图软件：打开一张图片，即可用方向键在"
              "<b>同一文件夹</b>里前后翻页，类似经典的 Windows 照片查看器。</p>"
              "<p>默认缩放：小于窗口的图片按 100% 显示；大于窗口的图片缩小以适应窗口，居中、默认不放大。</p>"
              "<p>许可证：MIT<br>开发：喜相逢科技 / Xixiangfeng Tech<br>"
              "网站：<a href=\"https://www.ak129.cn/flip/\">https://www.ak129.cn/flip/</a></p>")},
+        {"tips.title", QStringLiteral("使用提示")},
+        {"tips.body",
+         QStringLiteral(
+             "<p>打开一张图片后，即可在<b>同一文件夹</b>里前后翻页。</p>"
+             "<ul>"
+             "<li>方向键、空格、PageUp / PageDown：上一张 / 下一张</li>"
+             "<li>点击画面左 / 右边缘：上一张 / 下一张</li>"
+             "<li>鼠标滚轮翻页；按住 Ctrl 再滚轮可缩放</li>"
+             "<li>默认缩放：小于窗口的图片按 100% 显示，大于窗口的缩小以适应窗口</li>"
+             "</ul>")},
+        {"tips.ok", QStringLiteral("知道了")},
+        {"tips.dontShow", QStringLiteral("不再提示")},
+        {"update.title", QStringLiteral("发现新版本")},
+        {"update.body",
+         QStringLiteral("<p>当前版本 %1，新版本 <b>%2</b>。</p><p>%3</p>")},
+        {"update.go", QStringLiteral("前往更新")},
+        {"update.picking", QStringLiteral("正在选择较快的源…")},
+        {"update.dont", QStringLiteral("不更新")},
+        {"update.later", QStringLiteral("稍后再说")},
         {"status.ready", QStringLiteral("打开一张图片开始浏览")},
         {"status.position", QStringLiteral("%1 / %2")},
         {"usage",
@@ -91,12 +111,32 @@ QHash<QString, QString> enTable()
         {"about.title", QStringLiteral("About Flip")},
         {"about.body",
          QStringLiteral(
-             "<p><b>Flip</b> (看图) is a lightweight office image viewer: open one picture, then "
+             "<p><b>Flip</b> (看图) version %1</p>"
+             "<p>A lightweight office image viewer: open one picture, then "
              "page through the <b>same folder</b> with the arrow keys, like classic Windows Photo Viewer.</p>"
              "<p>Default zoom: images smaller than the window stay at 100%; larger images scale down to fit, "
              "centered, with no upscaling by default.</p>"
              "<p>License: MIT<br>Developer: 喜相逢科技 / Xixiangfeng Tech<br>"
              "Website: <a href=\"https://www.ak129.cn/flip/\">https://www.ak129.cn/flip/</a></p>")},
+        {"tips.title", QStringLiteral("Tips")},
+        {"tips.body",
+         QStringLiteral(
+             "<p>Open an image, then page through the <b>same folder</b>.</p>"
+             "<ul>"
+             "<li>Arrow keys, Space, PageUp / PageDown: previous / next</li>"
+             "<li>Click the left or right edge: previous / next</li>"
+             "<li>Mouse wheel pages; Ctrl+wheel zooms</li>"
+             "<li>Default zoom: images smaller than the window stay at 100%; larger images scale down to fit</li>"
+             "</ul>")},
+        {"tips.ok", QStringLiteral("OK")},
+        {"tips.dontShow", QStringLiteral("Don't show again")},
+        {"update.title", QStringLiteral("Update available")},
+        {"update.body",
+         QStringLiteral("<p>Current version %1, new version <b>%2</b>.</p><p>%3</p>")},
+        {"update.go", QStringLiteral("Go to update")},
+        {"update.picking", QStringLiteral("Picking the faster source…")},
+        {"update.dont", QStringLiteral("Don't update")},
+        {"update.later", QStringLiteral("Later")},
         {"status.ready", QStringLiteral("Open an image to start browsing")},
         {"status.position", QStringLiteral("%1 / %2")},
         {"usage",
