@@ -1,15 +1,20 @@
 #include "SelfTest.h"
 
+#include "AppInfo.h"
 #include "FitZoom.h"
 #include "FolderPager.h"
 #include "I18n.h"
+#include "LaunchSettings.h"
 #include "NaturalSort.h"
+#include "UpdateFeed.h"
+#include "VersionCompare.h"
 
 #include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <cmath>
 #include <cstdio>
@@ -73,10 +78,74 @@ int runSelfTest()
     expect(!naturalLessThan(QStringLiteral("img10.png"), QStringLiteral("img2.png")),
            "natural sort 10 not < 2");
 
+    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.1.0"), "app version 1.1.0");
+    qunsetenv("FLIP_UPDATE_FEED");
+    expect(compareVersions(QStringLiteral("1.1.0"), QStringLiteral("1.0.0")) > 0, "1.1.0 > 1.0.0");
+    expect(compareVersions(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")) < 0, "1.0.0 < 1.1.0");
+    expect(compareVersions(QStringLiteral("1.0"), QStringLiteral("1.0.0")) == 0, "1.0 == 1.0.0");
+    expect(compareVersions(QStringLiteral("v1.2.0"), QStringLiteral("1.1.9")) > 0, "v1.2.0 > 1.1.9");
+    expect(compareVersions(QStringLiteral("1.10.0"), QStringLiteral("1.9.0")) > 0, "1.10.0 > 1.9.0");
+    expect(isNewerVersion(QStringLiteral("1.2.0"), QStringLiteral("1.1.0")), "remote 1.2.0 is newer");
+    expect(!isNewerVersion(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")), "older remote is not newer");
+    expect(!isNewerVersion(QStringLiteral("1.1.0"), QStringLiteral("1.1.0")), "same version is not newer");
+    expect(!isNewerVersion(QString(), QStringLiteral("1.1.0")), "empty remote is not newer");
+
+    const QByteArray sampleJson = QByteArrayLiteral(
+        "{\n"
+        "  \"schema\": 1,\n"
+        "  \"product\": \"Flip\",\n"
+        "  \"linux\": {\n"
+        "    \"version\": \"1.0.0\",\n"
+        "    \"notes\": {\n"
+        "      \"zh\": \"同目录翻页看图；方向键与边缘点击翻页。需 Qt 6 运行库。\",\n"
+        "      \"en\": \"Same-folder image paging; arrow keys and edge click. Needs Qt 6 runtime.\"\n"
+        "    },\n"
+        "    \"download\": {\n"
+        "      \"site\": \"https://www.ak129.cn/flip/#linux\",\n"
+        "      \"gitee\": \"https://gitee.com/akcg/flip-linux/releases/tag/v1.0.0\",\n"
+        "      \"github\": \"https://github.com/akchansun/flip-linux/releases/tag/v1.0.0\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n");
+    LinuxRelease rel;
+    expect(parseLinuxRelease(sampleJson, &rel), "parse linux version.json");
+    expect(rel.version == QStringLiteral("1.0.0"), "parsed linux version");
+    expect(rel.downloadGitee.contains(QStringLiteral("gitee.com")), "parsed gitee url");
+    expect(preferredDownloadUrl(rel, true).contains(QStringLiteral("gitee.com")),
+           "china prefers gitee");
+    expect(preferredDownloadUrl(rel, false).contains(QStringLiteral("ak129.cn")),
+           "others prefer site");
+    expect(!parseLinuxRelease(QByteArrayLiteral("{not json"), &rel), "reject invalid json");
+    expect(!parseLinuxRelease(QByteArrayLiteral("{\"macos\":{}}"), &rel), "reject missing linux");
+    expect(updateFeedUrl().toString().contains(QStringLiteral("/flip/version.json")),
+           "default update feed url");
+
+    {
+        QTemporaryDir cfg;
+        expect(cfg.isValid(), "settings temp dir");
+        QSettings s(cfg.path() + QStringLiteral("/flip.ini"), QSettings::IniFormat);
+        expect(LaunchSettings::shouldShowStartupTips(s), "tips shown by default");
+        expect(LaunchSettings::shouldAskForUpdates(s), "update asked by default");
+        LaunchSettings::setStartupTipsDontShow(s, true);
+        LaunchSettings::setUpdateDontAsk(s, true);
+        s.sync();
+        QSettings s2(cfg.path() + QStringLiteral("/flip.ini"), QSettings::IniFormat);
+        expect(!LaunchSettings::shouldShowStartupTips(s2), "tips dontShow persists");
+        expect(!LaunchSettings::shouldAskForUpdates(s2), "update dontAsk persists");
+        expect(s2.contains(LaunchSettings::tipsDontShowKey()), "tips settings key");
+        expect(s2.contains(LaunchSettings::updateDontAskKey()), "update settings key");
+    }
+
     I18n::setLang(I18n::Lang::ZhCN);
     expect(I18n::t("app.name") == QStringLiteral("看图"), "zh app name");
+    expect(I18n::t("tips.dontShow") == QStringLiteral("不再提示"), "zh dont show tips");
+    expect(I18n::t("update.dont") == QStringLiteral("不更新"), "zh dont update");
+    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.1.0")),
+           "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");
+    expect(I18n::t("tips.dontShow") == QStringLiteral("Don't show again"), "en dont show tips");
+    expect(I18n::t("update.later") == QStringLiteral("Later"), "en later");
 
     QTemporaryDir tmp;
     expect(tmp.isValid(), "temp dir");

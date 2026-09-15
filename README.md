@@ -15,7 +15,9 @@
 - 常见格式（由 Qt 图像插件提供）：JPEG、PNG、BMP、GIF、WebP、TIFF 等
 - 窗口标题显示文件名
 - 界面语言：简体中文 / English（可跟随系统，也可在「查看 → 语言」里切换）
-- 关于对话框含 MIT 说明与 https://www.ak129.cn/flip/
+- 每次启动显示使用提示（可选择「不再提示」）
+- 每次启动在线检查更新（读取官网 `version.json` 的 `linux` 字段）。有新版本时弹出说明；「前往更新」打开下载页（国内优先 Gitee，否则官网 / GitHub），**不会自动覆盖本机程序**。「不更新」之后不再询问；「稍后再说」下次启动仍会检查
+- 关于对话框含版本号、MIT 说明与 https://www.ak129.cn/flip/
 
 ## 依赖
 
@@ -110,6 +112,8 @@ A small, free image viewer for Linux: open one file, then page through the **sam
 - License: MIT
 - Developer: [喜相逢科技 / Xixiangfeng Tech](https://www.ak129.cn/flip/)
 - Targets: Ubuntu and Chinese domestic Linux desktops (UnionTech UOS, Kylin) on **amd64**
+- Each launch shows a short tips dialog unless you chose **Don't show again**
+- Each launch checks [version.json](https://www.ak129.cn/flip/version.json) (`linux`). A newer build shows notes; **Go to update** opens the download page (Gitee first in Chinese locales, otherwise the site / GitHub). The app never overwrites its own binary. **Don't update** stops asking; **Later** asks again next time
 
 Build:
 
