@@ -7,16 +7,21 @@
 #include "I18n.h"
 #include "InPlaceUpdater.h"
 #include "LaunchSettings.h"
+#include "MainWindow.h"
 #include "NaturalSort.h"
 #include "UpdateFeed.h"
 #include "VersionCompare.h"
 
+#include <QAction>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QKeySequence>
+#include <QMenu>
+#include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -82,7 +87,7 @@ int runSelfTest()
     expect(!naturalLessThan(QStringLiteral("img10.png"), QStringLiteral("img2.png")),
            "natural sort 10 not < 2");
 
-    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.2"), "app version 1.2.2");
+    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.3"), "app version 1.2.3");
     qunsetenv("FLIP_UPDATE_FEED");
     expect(compareVersions(QStringLiteral("1.1.0"), QStringLiteral("1.0.0")) > 0, "1.1.0 > 1.0.0");
     expect(compareVersions(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")) < 0, "1.0.0 < 1.1.0");
@@ -217,19 +222,55 @@ int runSelfTest()
     expect(I18n::t("update.go") == QStringLiteral("前往更新"), "zh go update");
     expect(I18n::t("update.later") == QStringLiteral("稍后再说"), "zh later");
     expect(I18n::t("tips.ok") == QStringLiteral("知道了"), "zh tips ok");
+    expect(I18n::t("help.tips") == QStringLiteral("使用提示(&T)"), "zh help tips");
+    expect(I18n::t("help.visitWebsite").contains(QStringLiteral("产品页")), "zh visit website");
+    expect(I18n::t("tips.body").contains(QStringLiteral("同一文件夹")), "zh tips body for help");
     expect(I18n::t("launch.combinedTitle").contains(QStringLiteral("Flip")), "zh combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("源")), "zh picking source");
     expect(I18n::t("update.openDownload") == QStringLiteral("打开下载"), "zh open download");
-    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.2")),
+    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.3")),
            "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");
+    expect(I18n::t("help.tips") == QStringLiteral("&Usage Tips"), "en help tips");
+    expect(I18n::t("help.visitWebsite").contains(QStringLiteral("ak129.cn")), "en visit website");
     expect(I18n::t("tips.dontShow") == QStringLiteral("Don't show again"), "en dont show tips");
     expect(I18n::t("update.later") == QStringLiteral("Later"), "en later");
     expect(I18n::t("update.go") == QStringLiteral("Go to update"), "en go update");
     expect(I18n::t("launch.combinedTitle") == QStringLiteral("Welcome"), "en combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("faster")), "en picking source");
     expect(I18n::t("update.openDownload").contains(QStringLiteral("download")), "en open download");
+
+    {
+        MainWindow window;
+        expect(!window.menuBar()->actions().isEmpty(), "menu bar has menus");
+        QMenu* helpMenu = window.menuBar()->actions().last()->menu();
+        expect(helpMenu != nullptr, "last menu is help");
+        QList<QAction*> items;
+        for (QAction* action : helpMenu->actions()) {
+            if (!action->isSeparator())
+                items << action;
+        }
+        expect(items.size() == 3, "help has tips, website, about");
+        if (items.size() == 3) {
+            expect(items.at(0)->shortcut() == QKeySequence(QKeySequence::HelpContents),
+                   "HelpContents/F1 bound to tips");
+            expect(items.at(1)->shortcut().isEmpty(), "visit website has no HelpContents shortcut");
+            expect(items.at(2)->shortcut().isEmpty(), "about has no HelpContents shortcut");
+        }
+        QStringList labels;
+        for (QAction* action : items)
+            labels << action->text().remove(QLatin1Char('&'));
+        const bool hasTips = labels.contains(QStringLiteral("使用提示"))
+            || labels.contains(QStringLiteral("Usage Tips"));
+        const bool hasAbout = labels.contains(QStringLiteral("关于"))
+            || labels.contains(QStringLiteral("About"));
+        const bool hasVisit = labels.contains(QStringLiteral("访问 Flip 产品页"))
+            || labels.contains(QStringLiteral("Visit Flip on ak129.cn"));
+        expect(hasTips, "help menu labels include usage tips");
+        expect(hasVisit, "help menu labels include visit website");
+        expect(hasAbout, "help menu labels include about");
+    }
 
     {
         QTemporaryDir pack;

@@ -10,5 +10,5 @@
 
 // Keep in sync with project(Flip VERSION ...) in CMakeLists.txt.
 #ifndef FLIP_VERSION
-#define FLIP_VERSION "1.2.2"
+#define FLIP_VERSION "1.2.3"
 #endif

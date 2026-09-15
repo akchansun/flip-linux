@@ -15,6 +15,7 @@
 - 常见格式（由 Qt 图像插件提供）：JPEG、PNG、BMP、GIF、WebP、TIFF 等
 - 窗口标题显示文件名
 - 界面语言：简体中文 / English（可跟随系统，也可在「查看 → 语言」里切换）
+- 帮助菜单：「使用提示」（F1）随时再看与启动提示相同的操作说明；「关于」仍在帮助菜单。「访问 Flip 产品页」打开 https://www.ak129.cn/flip/
 - 启动时使用提示与更新检查合并为**同一个对话框**（仅提示 / 仅更新 / 两者同时，不再连续弹两个窗）。提示可勾选「不再提示」；仅提示时按钮为「知道了」。点击「前往更新」并执行原地替换后，下一次启动会跳过一次使用提示（合并对话框里已经看过）；未勾选「不再提示」时，之后启动仍会显示。「稍后再说 / 不更新」不会设置这次一次性跳过
 - 每次启动在线检查更新（读取官网 `version.json` 的 `linux` 字段）。有新版本时同一窗口提供「前往更新 / 稍后再说 / 不更新」。「前往更新」会并行短超时探测 **`giteeAsset` / `githubAsset`**（HEAD，不行再用 Range GET），下载更快的 tar.gz，解压后在**当前可执行文件所在目录**原地替换 `Flip` 以及同目录的 README / desktop / 图标，然后重新打开。目录不可写（只读位置、系统目录、AppImage 等）时改为打开下载链接。「稍后再说」和「不更新」都只关闭本次对话框，下次启动仍会检查
 - 关于对话框含版本号、MIT 说明与 https://www.ak129.cn/flip/
@@ -102,6 +103,7 @@ linuxdeploy --appdir AppDir -e build/Flip -d packaging/flip.desktop -i resources
 | 双击图片 | 在适应窗口与 100% 之间切换 |
 | F11 | 全屏 |
 | Ctrl+O / Ctrl+Shift+O | 打开图片 / 打开文件夹 |
+| F1 | 使用提示（帮助菜单） |
 
 ---
 
@@ -112,6 +114,7 @@ A small, free image viewer for Linux: open one file, then page through the **sam
 - License: MIT
 - Developer: [喜相逢科技 / Xixiangfeng Tech](https://www.ak129.cn/flip/)
 - Targets: Ubuntu and Chinese domestic Linux desktops (UnionTech UOS, Kylin) on **amd64**
+- Help menu: **Usage Tips** (F1) shows the same text as the launch tips dialog; **About** remains. **Visit Flip on ak129.cn** opens https://www.ak129.cn/flip/
 - Each launch uses **one combined dialog** for usage tips and/or updates (tips-only, update-only, or both). Check **Don't show again** to skip tips; tips-only uses **OK**. After **Go to update** runs an in-place replace, the next launch skips tips once (they were already in the combined dialog); if **Don't show again** was not checked, later launches still show tips. **Later** / **Don't update** do not set this one-shot skip
 - Each launch checks [version.json](https://www.ak129.cn/flip/version.json) (`linux`). A newer build offers **Go to update / Later / Don't update** in that same window. **Go to update** races **`linux.download.giteeAsset` vs `githubAsset`** (HEAD, then a 1-byte ranged GET if HEAD is rejected), downloads the faster tarball, and **replaces `Flip` plus README / desktop / icons in the running executable’s directory**, then relaunches. If that directory is not writable (read-only path, system install, AppImage), it opens the download instead. **Later** and **Don't update** only close this launch; the next launch still checks
 

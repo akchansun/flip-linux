@@ -38,6 +38,8 @@ private:
     void goNext();
     void goFirst();
     void goLast();
+    void showTips();
+    void visitWebsite();
     void showAbout();
     void loadCurrent();
     void updateChrome();
@@ -62,6 +64,8 @@ private:
     QAction* m_langAutoAction = nullptr;
     QAction* m_langZhAction = nullptr;
     QAction* m_langEnAction = nullptr;
+    QAction* m_tipsAction = nullptr;
+    QAction* m_visitWebsiteAction = nullptr;
     QAction* m_aboutAction = nullptr;
 
     QMenu* m_fileMenu = nullptr;

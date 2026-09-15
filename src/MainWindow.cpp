@@ -8,6 +8,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -22,6 +23,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPushButton>
 #include <QSettings>
 #include <QShowEvent>
 #include <QStatusBar>
@@ -130,8 +132,14 @@ void MainWindow::setupUi()
         retranslateUi();
     });
 
+    m_tipsAction = new QAction(this);
+    m_tipsAction->setShortcut(QKeySequence::HelpContents);
+    connect(m_tipsAction, &QAction::triggered, this, &MainWindow::showTips);
+
+    m_visitWebsiteAction = new QAction(this);
+    connect(m_visitWebsiteAction, &QAction::triggered, this, &MainWindow::visitWebsite);
+
     m_aboutAction = new QAction(this);
-    m_aboutAction->setShortcut(QKeySequence::HelpContents);
     connect(m_aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
 
     m_fileMenu = menuBar()->addMenu(QString());
@@ -156,6 +164,9 @@ void MainWindow::setupUi()
     m_langMenu->addAction(m_langEnAction);
 
     m_helpMenu = menuBar()->addMenu(QString());
+    m_helpMenu->addAction(m_tipsAction);
+    m_helpMenu->addAction(m_visitWebsiteAction);
+    m_helpMenu->addSeparator();
     m_helpMenu->addAction(m_aboutAction);
 
     auto* toolbar = addToolBar(QStringLiteral("main"));
@@ -214,6 +225,8 @@ void MainWindow::retranslateUi()
     m_langAutoAction->setText(I18n::t("view.langAuto"));
     m_langZhAction->setText(I18n::t("view.langZh"));
     m_langEnAction->setText(I18n::t("view.langEn"));
+    m_tipsAction->setText(I18n::t("help.tips"));
+    m_visitWebsiteAction->setText(I18n::t("help.visitWebsite"));
     m_aboutAction->setText(I18n::t("help.about"));
     QApplication::setApplicationDisplayName(I18n::t("app.name"));
     m_view->update();
@@ -324,6 +337,37 @@ void MainWindow::handleDropped(const QStringList& paths)
     if (paths.isEmpty())
         return;
     openPath(paths.first());
+}
+
+void MainWindow::showTips()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(I18n::t("tips.title"));
+    dialog.setModal(true);
+    dialog.setMinimumWidth(500);
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(20, 16, 20, 12);
+    layout->setSpacing(12);
+    auto* label = new QLabel(I18n::t("tips.body"), &dialog);
+    label->setTextFormat(Qt::RichText);
+    label->setWordWrap(true);
+    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    label->setMinimumWidth(460);
+    layout->addWidget(label);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    if (QPushButton* ok = buttons->button(QDialogButtonBox::Ok)) {
+        ok->setText(I18n::t("tips.ok"));
+        ok->setDefault(true);
+    }
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    layout->addWidget(buttons);
+    dialog.adjustSize();
+    dialog.exec();
+}
+
+void MainWindow::visitWebsite()
+{
+    QDesktopServices::openUrl(QUrl(QStringLiteral(FLIP_WEBSITE_URL)));
 }
 
 void MainWindow::showAbout()
