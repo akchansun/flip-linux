@@ -15,6 +15,7 @@ struct LinuxRelease {
 };
 
 bool parseLinuxRelease(const QByteArray& json, LinuxRelease* out);
+bool hasLinuxDownloadCandidate(const LinuxRelease& rel);
 QString releaseNotes(const LinuxRelease& rel);
 QUrl updateFeedUrl();
 int updateFeedTimeoutMs();

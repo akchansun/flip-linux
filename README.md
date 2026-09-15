@@ -15,8 +15,8 @@
 - 常见格式（由 Qt 图像插件提供）：JPEG、PNG、BMP、GIF、WebP、TIFF 等
 - 窗口标题显示文件名
 - 界面语言：简体中文 / English（可跟随系统，也可在「查看 → 语言」里切换）
-- 每次启动显示使用提示（可选择「不再提示」）
-- 每次启动在线检查更新（读取官网 `version.json` 的 `linux` 字段）。有新版本时弹出说明；「前往更新」会并行短超时探测 **`giteeAsset` / `githubAsset`**（HEAD，不行再用 Range GET），打开更快的安装包；失败则换另一个包，再发布页，再官网。**不会自动覆盖本机程序**。「不更新」之后不再询问；「稍后再说」下次启动仍会检查
+- 启动时使用提示与更新检查合并为**同一个对话框**（仅提示 / 仅更新 / 两者同时，不再连续弹两个窗）。提示可勾选「不再提示」；仅提示时按钮为「知道了」
+- 每次启动在线检查更新（读取官网 `version.json` 的 `linux` 字段）。有新版本时同一窗口提供「前往更新 / 稍后再说 / 不更新」。「前往更新」会并行短超时探测 **`giteeAsset` / `githubAsset`**（HEAD，不行再用 Range GET），下载更快的 tar.gz，解压后在**当前可执行文件所在目录**原地替换 `Flip` 以及同目录的 README / desktop / 图标，然后重新打开。目录不可写（只读位置、系统目录、AppImage 等）时改为打开下载链接。「不更新」之后不再询问；「稍后再说」下次启动仍会检查
 - 关于对话框含版本号、MIT 说明与 https://www.ak129.cn/flip/
 
 ## 依赖
@@ -112,8 +112,8 @@ A small, free image viewer for Linux: open one file, then page through the **sam
 - License: MIT
 - Developer: [喜相逢科技 / Xixiangfeng Tech](https://www.ak129.cn/flip/)
 - Targets: Ubuntu and Chinese domestic Linux desktops (UnionTech UOS, Kylin) on **amd64**
-- Each launch shows a short tips dialog unless you chose **Don't show again**
-- Each launch checks [version.json](https://www.ak129.cn/flip/version.json) (`linux`). A newer build shows notes; **Go to update** races **`linux.download.giteeAsset` vs `githubAsset`** (HEAD, then a 1-byte ranged GET if HEAD is rejected) and opens/downloads from the faster winner. If that fails: the other asset, then the release pages, then the site. The app never overwrites its own binary. **Don't update** stops asking; **Later** asks again next time
+- Each launch uses **one combined dialog** for usage tips and/or updates (tips-only, update-only, or both). Check **Don't show again** to skip tips; tips-only uses **OK**
+- Each launch checks [version.json](https://www.ak129.cn/flip/version.json) (`linux`). A newer build offers **Go to update / Later / Don't update** in that same window. **Go to update** races **`linux.download.giteeAsset` vs `githubAsset`** (HEAD, then a 1-byte ranged GET if HEAD is rejected), downloads the faster tarball, and **replaces `Flip` plus README / desktop / icons in the running executable’s directory**, then relaunches. If that directory is not writable (read-only path, system install, AppImage), it opens the download instead. **Don't update** stops asking; **Later** asks again next time
 
 Build:
 

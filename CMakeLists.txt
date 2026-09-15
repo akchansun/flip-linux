@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Flip VERSION 1.1.0 LANGUAGES CXX)
+project(Flip VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ set(FLIP_SOURCES
     src/MainWindow.cpp
     src/UpdateFeed.cpp
     src/DownloadRace.cpp
+    src/InPlaceUpdater.cpp
     src/LaunchPrompts.cpp
     src/SelfTest.cpp
     resources/flip.qrc

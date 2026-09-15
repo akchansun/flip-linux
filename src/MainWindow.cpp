@@ -359,7 +359,7 @@ void MainWindow::showEvent(QShowEvent* event)
     if (m_didLaunchPrompts)
         return;
     m_didLaunchPrompts = true;
-    // After the window is up so a CLI image path can paint first; tips then async update.
+    // After the window is up so a CLI image path can paint first; one combined tips/update dialog.
     QTimer::singleShot(0, this, [this] { runLaunchPrompts(this); });
 }
 

@@ -47,6 +47,15 @@ bool parseLinuxRelease(const QByteArray& json, LinuxRelease* out)
     return true;
 }
 
+bool hasLinuxDownloadCandidate(const LinuxRelease& rel)
+{
+    return !rel.giteeAsset.trimmed().isEmpty()
+        || !rel.githubAsset.trimmed().isEmpty()
+        || !rel.downloadGitee.trimmed().isEmpty()
+        || !rel.downloadGithub.trimmed().isEmpty()
+        || !rel.downloadSite.trimmed().isEmpty();
+}
+
 QString releaseNotes(const LinuxRelease& rel)
 {
     if (I18n::resolved() == I18n::Lang::ZhCN) {

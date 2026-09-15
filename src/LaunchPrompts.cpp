@@ -1,16 +1,19 @@
 #include "LaunchPrompts.h"
 
-#include "DownloadRace.h"
 #include "AppInfo.h"
+#include "DownloadRace.h"
 #include "I18n.h"
+#include "InPlaceUpdater.h"
 #include "LaunchSettings.h"
 #include "UpdateFeed.h"
 #include "VersionCompare.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFrame>
 #include <QLabel>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -22,6 +25,33 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
+
+namespace {
+
+enum class CombinedChoice { None, GotIt, UpdateNow, Later, DontUpdate };
+
+void openDownloadFallback(const QStringList& urls)
+{
+    for (const QString& url : urls) {
+        if (url.isEmpty())
+            continue;
+        if (QDesktopServices::openUrl(QUrl(url)))
+            return;
+    }
+}
+
+void beginInPlaceUpdate(QWidget* parent, const LinuxRelease& rel, const QString& winner)
+{
+    const QStringList assets = rankedAssetUrlChain(rel, winner);
+    const QStringList opens = updateOpenUrlChain(rel, winner);
+    if (assets.isEmpty()) {
+        openDownloadFallback(opens);
+        return;
+    }
+    InPlaceUpdater::start(parent, assets, opens);
+}
+
+} // namespace
 
 class UpdateChecker final : public QObject
 {
@@ -37,13 +67,15 @@ public:
     void start()
     {
         const QUrl url = updateFeedUrl();
-        if (!url.isValid())
+        if (!url.isValid()) {
+            deliver(LinuxRelease{}, false);
             return;
+        }
 
         auto* nam = new QNetworkAccessManager(this);
         QNetworkRequest req(url);
         req.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("Flip/%1").arg(QStringLiteral(FLIP_VERSION)));
+                      QStringLiteral("Flip/%1 (Linux)").arg(QStringLiteral(FLIP_VERSION)));
         req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
@@ -62,13 +94,24 @@ public:
         watchdog->start(updateFeedTimeoutMs());
     }
 
+    void deliver(const LinuxRelease& rel, bool hasNewer)
+    {
+        QWidget* window = m_window;
+        if (window) {
+            QTimer::singleShot(0, window, [window, rel, hasNewer] {
+                presentCombinedLaunchDialog(window, rel, hasNewer);
+            });
+        }
+        deleteLater();
+    }
+
 private slots:
     void onFinished()
     {
         QNetworkReply* reply = m_reply;
         m_reply = nullptr;
         if (!reply) {
-            deleteLater();
+            deliver(LinuxRelease{}, false);
             return;
         }
 
@@ -76,28 +119,11 @@ private slots:
         const QByteArray payload = (error == QNetworkReply::NoError) ? reply->readAll() : QByteArray();
         reply->deleteLater();
 
-        if (error != QNetworkReply::NoError) {
-            deleteLater();
-            return;
-        }
-
         LinuxRelease rel;
-        if (!parseLinuxRelease(payload, &rel)) {
-            deleteLater();
-            return;
-        }
-        if (!isNewerVersion(rel.version, QStringLiteral(FLIP_VERSION))) {
-            deleteLater();
-            return;
-        }
-
-        QWidget* window = m_window;
-        if (!window) {
-            deleteLater();
-            return;
-        }
-        QTimer::singleShot(0, window, [window, rel] { showUpdateAvailableDialog(window, rel); });
-        deleteLater();
+        const bool ok = error == QNetworkReply::NoError && parseLinuxRelease(payload, &rel)
+            && isNewerVersion(rel.version, QStringLiteral(FLIP_VERSION))
+            && hasLinuxDownloadCandidate(rel);
+        deliver(ok ? rel : LinuxRelease{}, ok);
     }
 
 private:
@@ -105,113 +131,168 @@ private:
     QNetworkReply* m_reply = nullptr;
 };
 
-void showStartupTipsIfNeeded(QWidget* parent)
+void presentCombinedLaunchDialog(QWidget* parent, const LinuxRelease& rel, bool showUpdate)
 {
     QSettings settings;
-    if (!LaunchSettings::shouldShowStartupTips(settings))
+    const bool showTips = LaunchSettings::shouldShowStartupTips(settings);
+    showUpdate = showUpdate && !rel.version.isEmpty() && LaunchSettings::shouldAskForUpdates(settings);
+    if (!showTips && !showUpdate)
         return;
 
     QDialog dialog(parent);
-    dialog.setWindowTitle(I18n::t("tips.title"));
+    if (showTips && showUpdate)
+        dialog.setWindowTitle(I18n::t("launch.combinedTitle"));
+    else if (showUpdate)
+        dialog.setWindowTitle(I18n::t("update.title"));
+    else
+        dialog.setWindowTitle(I18n::t("tips.title"));
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
 
     auto* layout = new QVBoxLayout(&dialog);
     layout->setContentsMargins(20, 16, 20, 12);
     layout->setSpacing(12);
-    auto* label = new QLabel(I18n::t("tips.body"), &dialog);
-    label->setTextFormat(Qt::RichText);
-    label->setWordWrap(true);
-    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    label->setMinimumWidth(460);
-    layout->addWidget(label);
+
+    if (showTips) {
+        auto* tips = new QLabel(I18n::t("tips.body"), &dialog);
+        tips->setTextFormat(Qt::RichText);
+        tips->setWordWrap(true);
+        tips->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        tips->setMinimumWidth(460);
+        layout->addWidget(tips);
+    }
+
+    if (showTips && showUpdate) {
+        auto* line = new QFrame(&dialog);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        layout->addWidget(line);
+    }
+
+    if (showUpdate) {
+        const QString notes =
+            releaseNotes(rel).toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"));
+        auto* update = new QLabel(
+            I18n::t("update.body").arg(QStringLiteral(FLIP_VERSION), rel.version, notes), &dialog);
+        update->setTextFormat(Qt::RichText);
+        update->setWordWrap(true);
+        update->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        update->setMinimumWidth(460);
+        layout->addWidget(update);
+    }
+
+    QCheckBox* dontShowTips = nullptr;
+    if (showTips) {
+        dontShowTips = new QCheckBox(I18n::t("tips.dontShow"), &dialog);
+        layout->addWidget(dontShowTips);
+    }
 
     auto* buttons = new QDialogButtonBox(&dialog);
-    QPushButton* dontBtn = buttons->addButton(I18n::t("tips.dontShow"), QDialogButtonBox::ResetRole);
-    QPushButton* okBtn = buttons->addButton(I18n::t("tips.ok"), QDialogButtonBox::AcceptRole);
-    okBtn->setDefault(true);
-    okBtn->setFocus();
+    QPushButton* goBtn = nullptr;
+    QPushButton* laterBtn = nullptr;
+    QPushButton* dontBtn = nullptr;
+    QPushButton* okBtn = nullptr;
+    if (showUpdate) {
+        dontBtn = buttons->addButton(I18n::t("update.dont"), QDialogButtonBox::ResetRole);
+        laterBtn = buttons->addButton(I18n::t("update.later"), QDialogButtonBox::RejectRole);
+        goBtn = buttons->addButton(I18n::t("update.go"), QDialogButtonBox::AcceptRole);
+        goBtn->setDefault(true);
+        goBtn->setFocus();
+    } else {
+        okBtn = buttons->addButton(I18n::t("tips.ok"), QDialogButtonBox::AcceptRole);
+        okBtn->setDefault(true);
+        okBtn->setFocus();
+    }
     layout->addWidget(buttons);
 
-    QObject::connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
-    QObject::connect(dontBtn, &QPushButton::clicked, &dialog, [&] {
-        LaunchSettings::setStartupTipsDontShow(settings, true);
-        settings.sync();
-        dialog.accept();
-    });
-
-    dialog.adjustSize();
-    dialog.exec();
-}
-
-void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
-{
-    QDialog dialog(parent);
-    dialog.setWindowTitle(I18n::t("update.title"));
-    dialog.setModal(true);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(20, 16, 20, 12);
-    layout->setSpacing(12);
-    const QString notes = releaseNotes(rel).toHtmlEscaped().replace(QLatin1Char('\n'),
-                                                                   QStringLiteral("<br>"));
-    auto* label = new QLabel(
-        I18n::t("update.body").arg(QStringLiteral(FLIP_VERSION), rel.version, notes), &dialog);
-    label->setTextFormat(Qt::RichText);
-    label->setWordWrap(true);
-    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    label->setMinimumWidth(460);
-    layout->addWidget(label);
-
-    auto* buttons = new QDialogButtonBox(&dialog);
-    QPushButton* dontBtn = buttons->addButton(I18n::t("update.dont"), QDialogButtonBox::ResetRole);
-    QPushButton* laterBtn = buttons->addButton(I18n::t("update.later"), QDialogButtonBox::RejectRole);
-    QPushButton* goBtn = buttons->addButton(I18n::t("update.go"), QDialogButtonBox::AcceptRole);
-    goBtn->setDefault(true);
-    goBtn->setFocus();
-    layout->addWidget(buttons);
-
-    QObject::connect(laterBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    bool racing = false;
-    QObject::connect(&dialog, &QDialog::finished, &dialog, [&racing] {
-        if (!racing)
-            return;
-        racing = false;
-        QApplication::restoreOverrideCursor();
-    });
-    QObject::connect(goBtn, &QPushButton::clicked, &dialog, [&] {
-        goBtn->setEnabled(false);
-        dontBtn->setEnabled(false);
-        goBtn->setText(I18n::t("update.picking"));
-        racing = true;
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        auto* racer = new DownloadRacer(&dialog);
-        QObject::connect(racer, &DownloadRacer::finished, &dialog, [&dialog, rel](const QString& winner) {
-            for (const QString& url : updateOpenUrlChain(rel, winner)) {
-                if (QDesktopServices::openUrl(QUrl(url)))
-                    break;
-            }
-            dialog.accept();
+    CombinedChoice choice = CombinedChoice::None;
+    QString winner;
+    bool raceDone = true;
+    DownloadRacer* racer = nullptr;
+    if (showUpdate && !linuxAssetRaceUrls(rel).isEmpty()) {
+        raceDone = false;
+        racer = new DownloadRacer(&dialog);
+        QObject::connect(racer, &DownloadRacer::finished, &dialog, [&](const QString& url) {
+            winner = url;
+            raceDone = true;
         });
         racer->start(rel);
-    });
-    QObject::connect(dontBtn, &QPushButton::clicked, &dialog, [&] {
-        QSettings settings;
-        LaunchSettings::setUpdateDontAsk(settings, true);
-        settings.sync();
-        dialog.reject();
+    }
+
+    QObject::connect(&dialog, &QDialog::finished, &dialog, [] {
+        QApplication::restoreOverrideCursor();
     });
 
-    dialog.setMinimumWidth(500);
+    if (okBtn) {
+        QObject::connect(okBtn, &QPushButton::clicked, &dialog, [&] {
+            choice = CombinedChoice::GotIt;
+            dialog.accept();
+        });
+    }
+    if (laterBtn) {
+        QObject::connect(laterBtn, &QPushButton::clicked, &dialog, [&] {
+            choice = CombinedChoice::Later;
+            dialog.reject();
+        });
+    }
+    if (dontBtn) {
+        QObject::connect(dontBtn, &QPushButton::clicked, &dialog, [&] {
+            choice = CombinedChoice::DontUpdate;
+            dialog.reject();
+        });
+    }
+    if (goBtn) {
+        QObject::connect(goBtn, &QPushButton::clicked, &dialog, [&] {
+            auto finishGo = [&] {
+                choice = CombinedChoice::UpdateNow;
+                dialog.accept();
+            };
+            if (raceDone) {
+                finishGo();
+                return;
+            }
+            goBtn->setEnabled(false);
+            if (laterBtn)
+                laterBtn->setEnabled(false);
+            if (dontBtn)
+                dontBtn->setEnabled(false);
+            goBtn->setText(I18n::t("update.picking"));
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            if (!racer)
+                return;
+            QObject::connect(racer, &DownloadRacer::finished, &dialog, [&, finishGo](const QString& url) {
+                winner = url;
+                raceDone = true;
+                QApplication::restoreOverrideCursor();
+                finishGo();
+            });
+        });
+    }
+
     dialog.adjustSize();
     dialog.exec();
+
+    if (dontShowTips && dontShowTips->isChecked()) {
+        LaunchSettings::setStartupTipsDontShow(settings, true);
+        settings.sync();
+    }
+    if (choice == CombinedChoice::DontUpdate) {
+        LaunchSettings::setUpdateDontAsk(settings, true);
+        settings.sync();
+    }
+    if (choice == CombinedChoice::UpdateNow)
+        beginInPlaceUpdate(parent, rel, winner);
 }
 
 void startOnlineUpdateCheck(QWidget* parent)
 {
     QSettings settings;
-    if (!LaunchSettings::shouldAskForUpdates(settings))
+    const bool showTips = LaunchSettings::shouldShowStartupTips(settings);
+    if (!LaunchSettings::shouldAskForUpdates(settings)) {
+        if (showTips)
+            presentCombinedLaunchDialog(parent, LinuxRelease{}, false);
         return;
+    }
     if (!parent)
         return;
 
@@ -221,11 +302,9 @@ void startOnlineUpdateCheck(QWidget* parent)
 
 void runLaunchPrompts(QWidget* parent)
 {
-    showStartupTipsIfNeeded(parent);
     if (!parent)
         return;
-    // After tips is fully dismissed so the check never nests inside that modal loop.
-    QTimer::singleShot(0, parent, [parent] { startOnlineUpdateCheck(parent); });
+    startOnlineUpdateCheck(parent);
 }
 
 #include "LaunchPrompts.moc"

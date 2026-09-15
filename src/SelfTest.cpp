@@ -5,6 +5,7 @@
 #include "FitZoom.h"
 #include "FolderPager.h"
 #include "I18n.h"
+#include "InPlaceUpdater.h"
 #include "LaunchSettings.h"
 #include "NaturalSort.h"
 #include "UpdateFeed.h"
@@ -12,9 +13,11 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QProcess>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <cmath>
@@ -79,7 +82,7 @@ int runSelfTest()
     expect(!naturalLessThan(QStringLiteral("img10.png"), QStringLiteral("img2.png")),
            "natural sort 10 not < 2");
 
-    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.1.0"), "app version 1.1.0");
+    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.0"), "app version 1.2.0");
     qunsetenv("FLIP_UPDATE_FEED");
     expect(compareVersions(QStringLiteral("1.1.0"), QStringLiteral("1.0.0")) > 0, "1.1.0 > 1.0.0");
     expect(compareVersions(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")) < 0, "1.0.0 < 1.1.0");
@@ -118,6 +121,7 @@ int runSelfTest()
     expect(rel.githubAsset.contains(QStringLiteral("github.com")), "parsed github asset");
     expect(linuxAssetRaceUrls(rel).size() == 2, "race uses both asset URLs");
     expect(linuxAssetRaceUrls(rel).first() == rel.giteeAsset, "gitee asset raced first");
+    expect(hasLinuxDownloadCandidate(rel), "sample json has download candidates");
     expect(probeHttpStatusOk(200) && probeHttpStatusOk(206) && probeHttpStatusOk(302),
            "2xx/3xx/206 probe ok");
     expect(!probeHttpStatusOk(404) && !probeHttpStatusOk(0), "404/0 probe not ok");
@@ -134,6 +138,15 @@ int runSelfTest()
         expect(timeoutChain.size() == 5, "timeout chain has assets, pages, site");
         expect(timeoutChain.indexOf(rel.downloadGitee) > timeoutChain.indexOf(rel.githubAsset),
                "release pages come after assets");
+        const QStringList rankedGithub = rankedAssetUrlChain(rel, rel.githubAsset);
+        expect(rankedGithub.size() == 2 && rankedGithub.first() == rel.githubAsset
+                   && rankedGithub.last() == rel.giteeAsset,
+               "ranked assets are winner then other");
+        expect(!rankedGithub.contains(rel.downloadSite) && !rankedGithub.contains(rel.downloadGitee),
+               "ranked assets omit pages and site");
+        const QStringList rankedEmpty = rankedAssetUrlChain(rel, QString());
+        expect(rankedEmpty.size() == 2 && rankedEmpty.first() == rel.giteeAsset,
+               "empty winner still ranks both assets");
     }
     LinuxRelease pagesOnly;
     const QByteArray noAssetJson = QByteArrayLiteral(
@@ -143,8 +156,10 @@ int runSelfTest()
         "\"github\":\"https://github.com/akchansun/flip-linux/releases/tag/v1.0.0\"}}}");
     expect(parseLinuxRelease(noAssetJson, &pagesOnly), "parse linux json without assets");
     expect(linuxAssetRaceUrls(pagesOnly).isEmpty(), "no assets means no race URLs");
+    expect(rankedAssetUrlChain(pagesOnly, QString()).isEmpty(), "no assets means no ranked assets");
     expect(updateOpenUrlChain(pagesOnly, QString()).size() == 3,
            "without assets chain is pages then site");
+    expect(hasLinuxDownloadCandidate(pagesOnly), "pages-only still has download candidates");
     expect(downloadProbeTimeoutMs() > 0 && downloadProbeTimeoutMs() < updateFeedTimeoutMs(),
            "probe timeout shorter than feed timeout");
     expect(!parseLinuxRelease(QByteArrayLiteral("{not json"), &rel), "reject invalid json");
@@ -172,14 +187,127 @@ int runSelfTest()
     expect(I18n::t("app.name") == QStringLiteral("看图"), "zh app name");
     expect(I18n::t("tips.dontShow") == QStringLiteral("不再提示"), "zh dont show tips");
     expect(I18n::t("update.dont") == QStringLiteral("不更新"), "zh dont update");
+    expect(I18n::t("update.go") == QStringLiteral("前往更新"), "zh go update");
+    expect(I18n::t("update.later") == QStringLiteral("稍后再说"), "zh later");
+    expect(I18n::t("tips.ok") == QStringLiteral("知道了"), "zh tips ok");
+    expect(I18n::t("launch.combinedTitle").contains(QStringLiteral("Flip")), "zh combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("源")), "zh picking source");
-    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.1.0")),
+    expect(I18n::t("update.openDownload") == QStringLiteral("打开下载"), "zh open download");
+    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.0")),
            "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");
     expect(I18n::t("tips.dontShow") == QStringLiteral("Don't show again"), "en dont show tips");
     expect(I18n::t("update.later") == QStringLiteral("Later"), "en later");
+    expect(I18n::t("update.go") == QStringLiteral("Go to update"), "en go update");
+    expect(I18n::t("launch.combinedTitle") == QStringLiteral("Welcome"), "en combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("faster")), "en picking source");
+    expect(I18n::t("update.openDownload").contains(QStringLiteral("download")), "en open download");
+
+    {
+        QTemporaryDir pack;
+        expect(pack.isValid(), "inplace pack temp dir");
+        const QString pkg = pack.path() + QStringLiteral("/flip-linux-1.2.0-amd64");
+        expect(QDir().mkpath(pkg + QStringLiteral("/icons")), "inplace pkg dirs");
+        auto writeBytes = [](const QString& path, const QByteArray& data) {
+            QFile f(path);
+            if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                return false;
+            return f.write(data) == data.size();
+        };
+        expect(writeBytes(pkg + QStringLiteral("/Flip"), QByteArrayLiteral("new-flip-binary")),
+               "write packaged Flip");
+        expect(writeBytes(pkg + QStringLiteral("/README.md"), QByteArrayLiteral("readme")),
+               "write packaged README");
+        expect(writeBytes(pkg + QStringLiteral("/LICENSE"), QByteArrayLiteral("mit")),
+               "write packaged LICENSE");
+        expect(writeBytes(pkg + QStringLiteral("/flip.desktop"), QByteArrayLiteral("[Desktop Entry]\n")),
+               "write packaged desktop");
+        expect(writeBytes(pkg + QStringLiteral("/icons/flip.svg"), QByteArrayLiteral("<svg/>")),
+               "write packaged icon");
+        expect(QDir().mkpath(pkg + QStringLiteral("/examples")), "inplace examples dir");
+        expect(writeBytes(pkg + QStringLiteral("/examples/skip-me"), QByteArrayLiteral("no")),
+               "write packaged example decoy");
+
+        expect(InPlaceUpdater::findFlipBinary(pack.path())
+                   == QFileInfo(pkg + QStringLiteral("/Flip")).absoluteFilePath(),
+               "find Flip in extract tree");
+
+        QTemporaryDir dest;
+        expect(dest.isValid(), "inplace dest temp dir");
+        const QString destExe = dest.path() + QStringLiteral("/Flip");
+        expect(writeBytes(destExe, QByteArrayLiteral("old-flip-binary")), "write old Flip");
+        expect(InPlaceUpdater::isInstallWritable(destExe), "temp install is writable");
+        expect(!InPlaceUpdater::isAppImageInstall(), "self-test is not AppImage");
+
+        QString err;
+        expect(InPlaceUpdater::stageNewBinary(pkg + QStringLiteral("/Flip"), destExe, &err),
+               "stage new binary beside running exe");
+        const QString staged = InPlaceUpdater::stagedBinaryPath(destExe);
+        expect(QFile::exists(staged), "staged Flip.flip-new exists");
+        {
+            QFile oldF(destExe);
+            expect(oldF.open(QIODevice::ReadOnly) && oldF.readAll() == QByteArrayLiteral("old-flip-binary"),
+                   "original Flip unchanged after staging");
+            QFile newF(staged);
+            expect(newF.open(QIODevice::ReadOnly) && newF.readAll() == QByteArrayLiteral("new-flip-binary"),
+                   "staged file is complete new binary");
+        }
+
+        const QStringList copied = InPlaceUpdater::copyPackageSidecars(pkg, dest.path());
+        expect(QFile::exists(dest.path() + QStringLiteral("/README.md")), "copied README");
+        expect(QFile::exists(dest.path() + QStringLiteral("/flip.desktop")), "copied desktop");
+        expect(QFile::exists(dest.path() + QStringLiteral("/icons/flip.svg")), "copied icon");
+        expect(!QFile::exists(dest.path() + QStringLiteral("/examples/skip-me")),
+               "did not copy examples");
+        expect(copied.size() >= 4, "copied readme license desktop icon");
+
+        const QString helper = InPlaceUpdater::helperScriptContents(4242, destExe, staged);
+        expect(helper.contains(QStringLiteral("mv \"$EXE\" \"$OLD\"")), "helper moves old binary");
+        expect(helper.contains(QStringLiteral("mv \"$NEW\" \"$EXE\"")), "helper installs staged binary");
+        expect(helper.contains(InPlaceUpdater::shellSingleQuote(destExe)), "helper quotes dest exe");
+        expect(helper.contains(QStringLiteral("4242")), "helper waits for pid");
+
+        {
+            const QString scriptPath = dest.path() + QStringLiteral("/helper.sh");
+            QFile script(scriptPath);
+            expect(script.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text),
+                   "write helper script");
+            const QByteArray body =
+                InPlaceUpdater::helperScriptContents(999999999, destExe, staged).toUtf8();
+            expect(script.write(body) == body.size(), "helper script bytes");
+            script.close();
+            QFile::setPermissions(scriptPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+            QProcess helperProc;
+            helperProc.start(QStringLiteral("/bin/bash"), {scriptPath});
+            expect(helperProc.waitForFinished(15000) && helperProc.exitCode() == 0,
+                   "helper swap succeeds");
+            QFile swapped(destExe);
+            expect(swapped.open(QIODevice::ReadOnly)
+                       && swapped.readAll() == QByteArrayLiteral("new-flip-binary"),
+                   "helper replaced Flip with staged binary");
+            expect(!QFile::exists(staged), "helper removed staged Flip.flip-new");
+        }
+
+        const QString archive = pack.path() + QStringLiteral("/pkg.tar.gz");
+        QProcess tar;
+        tar.start(QStringLiteral("tar"),
+                  {QStringLiteral("-czf"), archive, QStringLiteral("-C"), pack.path(),
+                   QStringLiteral("flip-linux-1.2.0-amd64")});
+        expect(tar.waitForFinished(15000) && tar.exitCode() == 0, "create sample tarball");
+        expect(InPlaceUpdater::fileLooksLikeGzip(archive), "tarball is gzip");
+        QTemporaryDir extracted;
+        expect(extracted.isValid(), "extract dest");
+        expect(InPlaceUpdater::extractTarball(archive, extracted.path(), &err), "extract tarball");
+        expect(InPlaceUpdater::findFlipBinary(extracted.path()).endsWith(QStringLiteral("/Flip")),
+               "extracted tarball contains Flip");
+
+        qputenv("APPIMAGE", "/tmp/Flip.AppImage");
+        expect(InPlaceUpdater::isAppImageInstall(), "APPIMAGE env detected");
+        expect(!InPlaceUpdater::isInstallWritable(destExe), "AppImage install not writable");
+        qunsetenv("APPIMAGE");
+        expect(InPlaceUpdater::isInstallWritable(destExe), "writable again after unset APPIMAGE");
+    }
 
     QTemporaryDir tmp;
     expect(tmp.isValid(), "temp dir");
