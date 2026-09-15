@@ -82,7 +82,7 @@ int runSelfTest()
     expect(!naturalLessThan(QStringLiteral("img10.png"), QStringLiteral("img2.png")),
            "natural sort 10 not < 2");
 
-    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.0"), "app version 1.2.0");
+    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.1"), "app version 1.2.1");
     qunsetenv("FLIP_UPDATE_FEED");
     expect(compareVersions(QStringLiteral("1.1.0"), QStringLiteral("1.0.0")) > 0, "1.1.0 > 1.0.0");
     expect(compareVersions(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")) < 0, "1.0.0 < 1.1.0");
@@ -183,6 +183,38 @@ int runSelfTest()
         expect(s2.contains(LaunchSettings::updateDontAskKey()), "update settings key");
     }
 
+    {
+        QTemporaryDir cfg;
+        expect(cfg.isValid(), "skipOnce settings temp dir");
+        const QString ini = cfg.path() + QStringLiteral("/flip.ini");
+        QSettings s(ini, QSettings::IniFormat);
+        expect(!s.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(),
+               "skipOnce off by default");
+        expect(!s.contains(LaunchSettings::tipsSkipOnceKey()), "skipOnce key absent by default");
+        expect(LaunchSettings::shouldShowStartupTips(s), "tips shown when skipOnce unset");
+
+        LaunchSettings::setSkipStartupTipsOnce(s, true);
+        s.sync();
+        QSettings s2(ini, QSettings::IniFormat);
+        expect(s2.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(), "skipOnce stored");
+        expect(LaunchSettings::shouldAskForUpdates(s2), "skipOnce does not suppress update check");
+        expect(!LaunchSettings::shouldShowStartupTips(s2), "skipOnce hides tips once");
+        expect(!s2.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(),
+               "skipOnce cleared after consume");
+        s2.sync();
+        QSettings s3(ini, QSettings::IniFormat);
+        expect(LaunchSettings::shouldShowStartupTips(s3), "tips return after one-shot skip");
+
+        LaunchSettings::setStartupTipsDontShow(s3, true);
+        LaunchSettings::setSkipStartupTipsOnce(s3, true);
+        s3.sync();
+        expect(!LaunchSettings::shouldShowStartupTips(s3),
+               "dontShow still hides tips with skipOnce");
+        expect(!s3.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(),
+               "skipOnce cleared under dontShow");
+        expect(!LaunchSettings::shouldShowStartupTips(s3), "dontShow persists after skipOnce");
+    }
+
     I18n::setLang(I18n::Lang::ZhCN);
     expect(I18n::t("app.name") == QStringLiteral("看图"), "zh app name");
     expect(I18n::t("tips.dontShow") == QStringLiteral("不再提示"), "zh dont show tips");
@@ -193,7 +225,7 @@ int runSelfTest()
     expect(I18n::t("launch.combinedTitle").contains(QStringLiteral("Flip")), "zh combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("源")), "zh picking source");
     expect(I18n::t("update.openDownload") == QStringLiteral("打开下载"), "zh open download");
-    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.0")),
+    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.1")),
            "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");

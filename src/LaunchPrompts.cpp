@@ -48,6 +48,10 @@ void beginInPlaceUpdate(QWidget* parent, const LinuxRelease& rel, const QString&
         openDownloadFallback(opens);
         return;
     }
+    // Tips already shown in this dialog; don't show again after relaunch.
+    QSettings settings;
+    LaunchSettings::setSkipStartupTipsOnce(settings, true);
+    settings.sync();
     InPlaceUpdater::start(parent, assets, opens);
 }
 
@@ -287,9 +291,11 @@ void presentCombinedLaunchDialog(QWidget* parent, const LinuxRelease& rel, bool 
 void startOnlineUpdateCheck(QWidget* parent)
 {
     QSettings settings;
-    const bool showTips = LaunchSettings::shouldShowStartupTips(settings);
     if (!LaunchSettings::shouldAskForUpdates(settings)) {
-        if (showTips)
+        // Consume skip-once here only on the tips-only path. The combined-dialog
+        // path consumes inside presentCombinedLaunchDialog so an update check
+        // still runs after an in-place relaunch.
+        if (LaunchSettings::shouldShowStartupTips(settings))
             presentCombinedLaunchDialog(parent, LinuxRelease{}, false);
         return;
     }
