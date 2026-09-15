@@ -112,18 +112,23 @@ void showStartupTipsIfNeeded(QWidget* parent)
     QDialog dialog(parent);
     dialog.setWindowTitle(I18n::t("tips.title"));
     dialog.setModal(true);
+    dialog.setMinimumWidth(500);
 
     auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(20, 16, 20, 12);
+    layout->setSpacing(12);
     auto* label = new QLabel(I18n::t("tips.body"), &dialog);
     label->setTextFormat(Qt::RichText);
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    label->setMinimumWidth(460);
     layout->addWidget(label);
 
     auto* buttons = new QDialogButtonBox(&dialog);
     QPushButton* dontBtn = buttons->addButton(I18n::t("tips.dontShow"), QDialogButtonBox::ResetRole);
     QPushButton* okBtn = buttons->addButton(I18n::t("tips.ok"), QDialogButtonBox::AcceptRole);
     okBtn->setDefault(true);
+    okBtn->setFocus();
     layout->addWidget(buttons);
 
     QObject::connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
@@ -133,7 +138,7 @@ void showStartupTipsIfNeeded(QWidget* parent)
         dialog.accept();
     });
 
-    dialog.resize(520, 320);
+    dialog.adjustSize();
     dialog.exec();
 }
 
@@ -144,6 +149,8 @@ void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(20, 16, 20, 12);
+    layout->setSpacing(12);
     const QString notes = releaseNotes(rel).toHtmlEscaped().replace(QLatin1Char('\n'),
                                                                    QStringLiteral("<br>"));
     auto* label = new QLabel(
@@ -151,6 +158,7 @@ void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
     label->setTextFormat(Qt::RichText);
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    label->setMinimumWidth(460);
     layout->addWidget(label);
 
     auto* buttons = new QDialogButtonBox(&dialog);
@@ -158,6 +166,7 @@ void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
     QPushButton* laterBtn = buttons->addButton(I18n::t("update.later"), QDialogButtonBox::RejectRole);
     QPushButton* goBtn = buttons->addButton(I18n::t("update.go"), QDialogButtonBox::AcceptRole);
     goBtn->setDefault(true);
+    goBtn->setFocus();
     layout->addWidget(buttons);
 
     QObject::connect(laterBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
@@ -174,7 +183,8 @@ void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
         dialog.reject();
     });
 
-    dialog.resize(520, 280);
+    dialog.setMinimumWidth(500);
+    dialog.adjustSize();
     dialog.exec();
 }
 
@@ -193,7 +203,10 @@ void startOnlineUpdateCheck(QWidget* parent)
 void runLaunchPrompts(QWidget* parent)
 {
     showStartupTipsIfNeeded(parent);
-    startOnlineUpdateCheck(parent);
+    if (!parent)
+        return;
+    // After tips is fully dismissed so the check never nests inside that modal loop.
+    QTimer::singleShot(0, parent, [parent] { startOnlineUpdateCheck(parent); });
 }
 
 #include "LaunchPrompts.moc"
