@@ -82,7 +82,7 @@ int runSelfTest()
     expect(!naturalLessThan(QStringLiteral("img10.png"), QStringLiteral("img2.png")),
            "natural sort 10 not < 2");
 
-    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.1"), "app version 1.2.1");
+    expect(QStringLiteral(FLIP_VERSION) == QStringLiteral("1.2.2"), "app version 1.2.2");
     qunsetenv("FLIP_UPDATE_FEED");
     expect(compareVersions(QStringLiteral("1.1.0"), QStringLiteral("1.0.0")) > 0, "1.1.0 > 1.0.0");
     expect(compareVersions(QStringLiteral("1.0.0"), QStringLiteral("1.1.0")) < 0, "1.0.0 < 1.1.0");
@@ -172,15 +172,11 @@ int runSelfTest()
         expect(cfg.isValid(), "settings temp dir");
         QSettings s(cfg.path() + QStringLiteral("/flip.ini"), QSettings::IniFormat);
         expect(LaunchSettings::shouldShowStartupTips(s), "tips shown by default");
-        expect(LaunchSettings::shouldAskForUpdates(s), "update asked by default");
         LaunchSettings::setStartupTipsDontShow(s, true);
-        LaunchSettings::setUpdateDontAsk(s, true);
         s.sync();
         QSettings s2(cfg.path() + QStringLiteral("/flip.ini"), QSettings::IniFormat);
         expect(!LaunchSettings::shouldShowStartupTips(s2), "tips dontShow persists");
-        expect(!LaunchSettings::shouldAskForUpdates(s2), "update dontAsk persists");
         expect(s2.contains(LaunchSettings::tipsDontShowKey()), "tips settings key");
-        expect(s2.contains(LaunchSettings::updateDontAskKey()), "update settings key");
     }
 
     {
@@ -197,7 +193,6 @@ int runSelfTest()
         s.sync();
         QSettings s2(ini, QSettings::IniFormat);
         expect(s2.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(), "skipOnce stored");
-        expect(LaunchSettings::shouldAskForUpdates(s2), "skipOnce does not suppress update check");
         expect(!LaunchSettings::shouldShowStartupTips(s2), "skipOnce hides tips once");
         expect(!s2.value(LaunchSettings::tipsSkipOnceKey(), false).toBool(),
                "skipOnce cleared after consume");
@@ -225,7 +220,7 @@ int runSelfTest()
     expect(I18n::t("launch.combinedTitle").contains(QStringLiteral("Flip")), "zh combined title");
     expect(I18n::t("update.picking").contains(QStringLiteral("源")), "zh picking source");
     expect(I18n::t("update.openDownload") == QStringLiteral("打开下载"), "zh open download");
-    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.1")),
+    expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.2.2")),
            "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");

@@ -18,11 +18,6 @@ inline QString tipsSkipOnceKey()
     return QStringLiteral("tips/skipOnce");
 }
 
-inline QString updateDontAskKey()
-{
-    return QStringLiteral("update/dontAsk");
-}
-
 inline void setSkipStartupTipsOnce(QSettings& settings, bool skip = true)
 {
     settings.setValue(tipsSkipOnceKey(), skip);
@@ -41,16 +36,6 @@ inline bool shouldShowStartupTips(QSettings& settings)
 inline void setStartupTipsDontShow(QSettings& settings, bool dontShow = true)
 {
     settings.setValue(tipsDontShowKey(), dontShow);
-}
-
-inline bool shouldAskForUpdates(const QSettings& settings)
-{
-    return !settings.value(updateDontAskKey(), false).toBool();
-}
-
-inline void setUpdateDontAsk(QSettings& settings, bool dontAsk = true)
-{
-    settings.setValue(updateDontAskKey(), dontAsk);
 }
 
 } // namespace LaunchSettings

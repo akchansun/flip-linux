@@ -139,7 +139,7 @@ void presentCombinedLaunchDialog(QWidget* parent, const LinuxRelease& rel, bool 
 {
     QSettings settings;
     const bool showTips = LaunchSettings::shouldShowStartupTips(settings);
-    showUpdate = showUpdate && !rel.version.isEmpty() && LaunchSettings::shouldAskForUpdates(settings);
+    showUpdate = showUpdate && !rel.version.isEmpty();
     if (!showTips && !showUpdate)
         return;
 
@@ -280,25 +280,13 @@ void presentCombinedLaunchDialog(QWidget* parent, const LinuxRelease& rel, bool 
         LaunchSettings::setStartupTipsDontShow(settings, true);
         settings.sync();
     }
-    if (choice == CombinedChoice::DontUpdate) {
-        LaunchSettings::setUpdateDontAsk(settings, true);
-        settings.sync();
-    }
+    // Later / DontUpdate only dismiss this launch; next launch still checks.
     if (choice == CombinedChoice::UpdateNow)
         beginInPlaceUpdate(parent, rel, winner);
 }
 
 void startOnlineUpdateCheck(QWidget* parent)
 {
-    QSettings settings;
-    if (!LaunchSettings::shouldAskForUpdates(settings)) {
-        // Consume skip-once here only on the tips-only path. The combined-dialog
-        // path consumes inside presentCombinedLaunchDialog so an update check
-        // still runs after an in-place relaunch.
-        if (LaunchSettings::shouldShowStartupTips(settings))
-            presentCombinedLaunchDialog(parent, LinuxRelease{}, false);
-        return;
-    }
     if (!parent)
         return;
 
