@@ -58,6 +58,20 @@ bool probeHttpStatusOk(int status)
     return status >= 200 && status < 400;
 }
 
+QStringList rankedAssetUrlChain(const LinuxRelease& rel, const QString& winner)
+{
+    QStringList out;
+    const auto add = [&out](const QString& url) {
+        if (url.isEmpty() || out.contains(url))
+            return;
+        out << url;
+    };
+    add(winner.trimmed());
+    add(rel.giteeAsset.trimmed());
+    add(rel.githubAsset.trimmed());
+    return out;
+}
+
 QStringList updateOpenUrlChain(const LinuxRelease& rel, const QString& winner)
 {
     QStringList out;

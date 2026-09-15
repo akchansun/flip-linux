@@ -16,6 +16,9 @@ QStringList linuxAssetRaceUrls(const LinuxRelease& rel);
 // HTTP 2xx/3xx (including 206 Partial Content) count as a live mirror.
 bool probeHttpStatusOk(int status);
 
+// Unique order: race winner, then the other direct asset (no pages / site).
+QStringList rankedAssetUrlChain(const LinuxRelease& rel, const QString& winner);
+
 // Unique order: race winner, other asset, release pages, product site.
 QStringList updateOpenUrlChain(const LinuxRelease& rel, const QString& winner);
 
