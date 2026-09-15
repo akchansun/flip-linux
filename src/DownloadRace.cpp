@@ -7,17 +7,50 @@
 #include <QNetworkRequest>
 #include <QTimer>
 #include <QUrl>
-#include <QList>
 
 namespace {
 constexpr int kProbeTimeoutMs = 2500;
+
+QNetworkRequest probeRequest(const QString& url, bool rangedGet)
+{
+    QNetworkRequest req{QUrl(url)};
+    req.setHeader(QNetworkRequest::UserAgentHeader,
+                  QStringLiteral("Flip/%1").arg(QStringLiteral(FLIP_VERSION)));
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    req.setTransferTimeout(kProbeTimeoutMs);
+#endif
+    if (rangedGet)
+        req.setRawHeader("Range", "bytes=0-0");
+    return req;
 }
 
-QString forgeProbeUrl(const QString& page, const QString& asset)
+int httpStatus(QNetworkReply* reply)
 {
-    if (!asset.trimmed().isEmpty())
-        return asset.trimmed();
-    return page.trimmed();
+    return reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+}
+
+bool headWasRejected(QNetworkReply* reply)
+{
+    if (reply->operation() != QNetworkAccessManager::HeadOperation)
+        return false;
+    const int status = httpStatus(reply);
+    return status == 405 || status == 501
+        || reply->error() == QNetworkReply::ContentOperationNotPermittedError;
+}
+} // namespace
+
+QStringList linuxAssetRaceUrls(const LinuxRelease& rel)
+{
+    QStringList urls;
+    const QString gitee = rel.giteeAsset.trimmed();
+    const QString github = rel.githubAsset.trimmed();
+    if (!gitee.isEmpty())
+        urls << gitee;
+    if (!github.isEmpty() && github != gitee)
+        urls << github;
+    return urls;
 }
 
 bool probeHttpStatusOk(int status)
@@ -28,16 +61,16 @@ bool probeHttpStatusOk(int status)
 QStringList updateOpenUrlChain(const LinuxRelease& rel, const QString& winner)
 {
     QStringList out;
-    const QString gitee = forgeProbeUrl(rel.downloadGitee, rel.giteeAsset);
-    const QString github = forgeProbeUrl(rel.downloadGithub, rel.githubAsset);
     const auto add = [&out](const QString& url) {
         if (url.isEmpty() || out.contains(url))
             return;
         out << url;
     };
     add(winner.trimmed());
-    add(gitee);
-    add(github);
+    add(rel.giteeAsset.trimmed());
+    add(rel.githubAsset.trimmed());
+    add(rel.downloadGitee.trimmed());
+    add(rel.downloadGithub.trimmed());
     add(rel.downloadSite.trimmed());
     return out;
 }
@@ -60,41 +93,50 @@ DownloadRacer::~DownloadRacer()
 
 void DownloadRacer::start(const LinuxRelease& rel)
 {
-    m_gitee = forgeProbeUrl(rel.downloadGitee, rel.giteeAsset);
-    m_github = forgeProbeUrl(rel.downloadGithub, rel.githubAsset);
-
-    QStringList race;
-    if (!m_gitee.isEmpty())
-        race << m_gitee;
-    if (!m_github.isEmpty() && m_github != m_gitee)
-        race << m_github;
-
-    if (race.isEmpty()) {
+    const QStringList assets = linuxAssetRaceUrls(rel);
+    if (assets.isEmpty()) {
         settle(QString());
-        return;
-    }
-    if (race.size() == 1) {
-        settle(race.first());
         return;
     }
 
     m_nam = new QNetworkAccessManager(this);
-    for (const QString& url : race) {
-        QNetworkRequest req{QUrl(url)};
-        req.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("Flip/%1").arg(QStringLiteral(FLIP_VERSION)));
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-        req.setTransferTimeout(kProbeTimeoutMs);
-#endif
-        // GET + abort after headers: measures TTFB. HEAD is often blocked on CDNs.
-        QNetworkReply* reply = m_nam->get(req);
-        m_probes.push_back({url, reply});
-        connect(reply, &QNetworkReply::metaDataChanged, this, &DownloadRacer::onMetaDataChanged);
-        connect(reply, &QNetworkReply::finished, this, &DownloadRacer::onReplyFinished);
-    }
+    for (const QString& url : assets)
+        beginProbe(url, false);
     armWatchdog();
+}
+
+void DownloadRacer::beginProbe(const QString& url, bool rangedGet)
+{
+    Probe* probe = nullptr;
+    for (Probe& p : m_probes) {
+        if (p.url == url) {
+            probe = &p;
+            break;
+        }
+    }
+    if (!probe) {
+        m_probes.push_back(Probe{url, nullptr, rangedGet});
+        probe = &m_probes.last();
+    }
+    probe->triedRangedGet = rangedGet;
+
+    const QNetworkRequest req = probeRequest(url, rangedGet);
+    QNetworkReply* reply = rangedGet ? m_nam->get(req) : m_nam->head(req);
+    probe->reply = reply;
+    connect(reply, &QNetworkReply::metaDataChanged, this, &DownloadRacer::onMetaDataChanged);
+    connect(reply, &QNetworkReply::finished, this, &DownloadRacer::onReplyFinished);
+}
+
+void DownloadRacer::retryWithRangedGet(Probe* probe)
+{
+    if (!probe || probe->triedRangedGet)
+        return;
+    if (probe->reply) {
+        probe->reply->disconnect(this);
+        probe->reply->deleteLater();
+        probe->reply = nullptr;
+    }
+    beginProbe(probe->url, true);
 }
 
 void DownloadRacer::armWatchdog()
@@ -110,6 +152,15 @@ void DownloadRacer::armWatchdog()
     watchdog->start(kProbeTimeoutMs);
 }
 
+DownloadRacer::Probe* DownloadRacer::probeFor(QNetworkReply* reply)
+{
+    for (Probe& p : m_probes) {
+        if (p.reply == reply)
+            return &p;
+    }
+    return nullptr;
+}
+
 void DownloadRacer::onMetaDataChanged()
 {
     if (m_settled)
@@ -117,43 +168,41 @@ void DownloadRacer::onMetaDataChanged()
     auto* reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply)
         return;
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const int status = httpStatus(reply);
+    if (headWasRejected(reply))
+        return;
     if (!probeHttpStatusOk(status))
         return;
-
-    QString url;
-    for (const Probe& p : m_probes) {
-        if (p.reply == reply) {
-            url = p.url;
-            break;
-        }
-    }
-    if (url.isEmpty())
-        url = reply->url().toString();
-    settle(url);
+    Probe* probe = probeFor(reply);
+    settle(probe ? probe->url : reply->url().toString());
 }
 
 void DownloadRacer::onReplyFinished()
 {
     if (m_settled)
         return;
-    ++m_finishedCount;
     auto* reply = qobject_cast<QNetworkReply*>(sender());
-    if (reply) {
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (reply->error() == QNetworkReply::NoError && probeHttpStatusOk(status)) {
-            QString url;
-            for (const Probe& p : m_probes) {
-                if (p.reply == reply) {
-                    url = p.url;
-                    break;
-                }
-            }
-            settle(url.isEmpty() ? reply->url().toString() : url);
-            return;
-        }
+    if (!reply)
+        return;
+
+    Probe* probe = probeFor(reply);
+    if (headWasRejected(reply) && probe && !probe->triedRangedGet) {
+        retryWithRangedGet(probe);
+        return;
     }
-    if (m_finishedCount >= m_probes.size())
+
+    const int status = httpStatus(reply);
+    if (reply->error() == QNetworkReply::NoError && probeHttpStatusOk(status)) {
+        settle(probe ? probe->url : reply->url().toString());
+        return;
+    }
+
+    int pending = 0;
+    for (const Probe& p : m_probes) {
+        if (p.reply && p.reply->isRunning())
+            ++pending;
+    }
+    if (pending == 0)
         settle(QString());
 }
 

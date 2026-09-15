@@ -10,20 +10,20 @@
 class QNetworkAccessManager;
 class QNetworkReply;
 
-// HEAD/GET the asset URL when present (e.g. amd64 tarball), otherwise the release page.
-QString forgeProbeUrl(const QString& page, const QString& asset);
+// Asset URLs used for the Gitee vs GitHub TTFB race (empty entries omitted).
+QStringList linuxAssetRaceUrls(const LinuxRelease& rel);
 
-// HTTP 2xx/3xx count as a live mirror. 4xx/5xx/0 do not win the race.
+// HTTP 2xx/3xx (including 206 Partial Content) count as a live mirror.
 bool probeHttpStatusOk(int status);
 
-// Unique order: race winner, then the other forge, then the product site.
+// Unique order: race winner, other asset, release pages, product site.
 QStringList updateOpenUrlChain(const LinuxRelease& rel, const QString& winner);
 
 int downloadProbeTimeoutMs();
 
-// Parallel TTFB race of Gitee vs GitHub. Emits the first successful probe URL
-// (asset preferred). If both fail, emits an empty string; the caller opens
-// Gitee, then GitHub, then the site.
+// Parallel HEAD (then ranged GET if HEAD is rejected) of giteeAsset vs githubAsset.
+// Emits the first successful asset URL. If both fail or assets are missing, emits
+// empty; the caller then opens the other asset, release pages, and the site.
 class DownloadRacer final : public QObject
 {
     Q_OBJECT
@@ -44,16 +44,17 @@ private:
     struct Probe {
         QString url;
         QNetworkReply* reply = nullptr;
+        bool triedRangedGet = false;
     };
 
     void armWatchdog();
+    void beginProbe(const QString& url, bool rangedGet);
+    void retryWithRangedGet(Probe* probe);
+    Probe* probeFor(QNetworkReply* reply);
     void settle(const QString& url);
     void abortAll();
 
     QNetworkAccessManager* m_nam = nullptr;
     QList<Probe> m_probes;
-    QString m_gitee;
-    QString m_github;
     bool m_settled = false;
-    int m_finishedCount = 0;
 };

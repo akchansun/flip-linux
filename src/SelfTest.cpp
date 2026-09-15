@@ -116,22 +116,35 @@ int runSelfTest()
     expect(rel.downloadGitee.contains(QStringLiteral("gitee.com")), "parsed gitee url");
     expect(rel.giteeAsset.contains(QStringLiteral("amd64.tar.gz")), "parsed gitee asset");
     expect(rel.githubAsset.contains(QStringLiteral("github.com")), "parsed github asset");
-    expect(forgeProbeUrl(rel.downloadGitee, rel.giteeAsset) == rel.giteeAsset,
-           "probe prefers gitee asset over page");
-    expect(forgeProbeUrl(rel.downloadGithub, QString()) == rel.downloadGithub,
-           "probe falls back to github page");
-    expect(probeHttpStatusOk(200) && probeHttpStatusOk(302), "2xx/3xx probe ok");
+    expect(linuxAssetRaceUrls(rel).size() == 2, "race uses both asset URLs");
+    expect(linuxAssetRaceUrls(rel).first() == rel.giteeAsset, "gitee asset raced first");
+    expect(probeHttpStatusOk(200) && probeHttpStatusOk(206) && probeHttpStatusOk(302),
+           "2xx/3xx/206 probe ok");
     expect(!probeHttpStatusOk(404) && !probeHttpStatusOk(0), "404/0 probe not ok");
     {
         const QStringList chain = updateOpenUrlChain(rel, rel.giteeAsset);
-        expect(!chain.isEmpty() && chain.first() == rel.giteeAsset, "winner first in fallback chain");
-        expect(chain.contains(rel.githubAsset), "chain includes other forge");
+        expect(!chain.isEmpty() && chain.first() == rel.giteeAsset, "winner asset first");
+        expect(chain.contains(rel.githubAsset), "chain includes other asset");
+        expect(chain.contains(rel.downloadGitee), "chain includes gitee release page");
+        expect(chain.contains(rel.downloadGithub), "chain includes github release page");
         expect(chain.contains(rel.downloadSite), "chain includes site");
-        expect(chain.size() == 3, "chain dedupes to winner, other forge, site");
+        expect(chain.size() == 5, "chain is winner, other asset, pages, site");
         const QStringList timeoutChain = updateOpenUrlChain(rel, QString());
-        expect(timeoutChain.first() == rel.giteeAsset, "empty winner still tries gitee then github then site");
-        expect(timeoutChain.size() == 3, "timeout chain has both forges and site");
+        expect(timeoutChain.first() == rel.giteeAsset, "empty winner still tries assets before pages");
+        expect(timeoutChain.size() == 5, "timeout chain has assets, pages, site");
+        expect(timeoutChain.indexOf(rel.downloadGitee) > timeoutChain.indexOf(rel.githubAsset),
+               "release pages come after assets");
     }
+    LinuxRelease pagesOnly;
+    const QByteArray noAssetJson = QByteArrayLiteral(
+        "{\"linux\":{\"version\":\"1.0.0\",\"download\":{"
+        "\"site\":\"https://www.ak129.cn/flip/#linux\","
+        "\"gitee\":\"https://gitee.com/akcg/flip-linux/releases/tag/v1.0.0\","
+        "\"github\":\"https://github.com/akchansun/flip-linux/releases/tag/v1.0.0\"}}}");
+    expect(parseLinuxRelease(noAssetJson, &pagesOnly), "parse linux json without assets");
+    expect(linuxAssetRaceUrls(pagesOnly).isEmpty(), "no assets means no race URLs");
+    expect(updateOpenUrlChain(pagesOnly, QString()).size() == 3,
+           "without assets chain is pages then site");
     expect(downloadProbeTimeoutMs() > 0 && downloadProbeTimeoutMs() < updateFeedTimeoutMs(),
            "probe timeout shorter than feed timeout");
     expect(!parseLinuxRelease(QByteArrayLiteral("{not json"), &rel), "reject invalid json");
