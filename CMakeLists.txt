@@ -28,6 +28,7 @@ set(FLIP_SOURCES
     src/ImageView.cpp
     src/MainWindow.cpp
     src/UpdateFeed.cpp
+    src/DownloadRace.cpp
     src/LaunchPrompts.cpp
     src/SelfTest.cpp
     resources/flip.qrc

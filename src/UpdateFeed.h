@@ -10,11 +10,11 @@ struct LinuxRelease {
     QString downloadSite;
     QString downloadGitee;
     QString downloadGithub;
+    QString giteeAsset;
+    QString githubAsset;
 };
 
 bool parseLinuxRelease(const QByteArray& json, LinuxRelease* out);
 QString releaseNotes(const LinuxRelease& rel);
-QString preferredDownloadUrl(const LinuxRelease& rel, bool preferChina);
-bool preferChinaDownload();
 QUrl updateFeedUrl();
 int updateFeedTimeoutMs();

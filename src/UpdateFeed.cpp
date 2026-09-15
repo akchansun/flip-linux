@@ -6,8 +6,6 @@
 #include <QByteArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLocale>
-#include <QStringList>
 #include <QtGlobal>
 #include <QUrl>
 
@@ -42,6 +40,8 @@ bool parseLinuxRelease(const QByteArray& json, LinuxRelease* out)
     rel.downloadSite = download.value(QStringLiteral("site")).toString().trimmed();
     rel.downloadGitee = download.value(QStringLiteral("gitee")).toString().trimmed();
     rel.downloadGithub = download.value(QStringLiteral("github")).toString().trimmed();
+    rel.giteeAsset = download.value(QStringLiteral("giteeAsset")).toString().trimmed();
+    rel.githubAsset = download.value(QStringLiteral("githubAsset")).toString().trimmed();
 
     *out = rel;
     return true;
@@ -57,28 +57,6 @@ QString releaseNotes(const LinuxRelease& rel)
     if (!rel.notesEn.isEmpty())
         return rel.notesEn;
     return rel.notesZh;
-}
-
-QString preferredDownloadUrl(const LinuxRelease& rel, bool preferChina)
-{
-    const QStringList chinaOrder{rel.downloadGitee, rel.downloadSite, rel.downloadGithub};
-    const QStringList otherOrder{rel.downloadSite, rel.downloadGithub, rel.downloadGitee};
-    for (const QString& url : (preferChina ? chinaOrder : otherOrder)) {
-        if (!url.isEmpty())
-            return url;
-    }
-    return {};
-}
-
-bool preferChinaDownload()
-{
-    if (I18n::resolved() == I18n::Lang::ZhCN)
-        return true;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
-    return QLocale::system().territory() == QLocale::China;
-#else
-    return QLocale::system().country() == QLocale::China;
-#endif
 }
 
 QUrl updateFeedUrl()

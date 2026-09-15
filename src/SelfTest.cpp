@@ -1,6 +1,7 @@
 #include "SelfTest.h"
 
 #include "AppInfo.h"
+#include "DownloadRace.h"
 #include "FitZoom.h"
 #include "FolderPager.h"
 #include "I18n.h"
@@ -103,7 +104,9 @@ int runSelfTest()
         "    \"download\": {\n"
         "      \"site\": \"https://www.ak129.cn/flip/#linux\",\n"
         "      \"gitee\": \"https://gitee.com/akcg/flip-linux/releases/tag/v1.0.0\",\n"
-        "      \"github\": \"https://github.com/akchansun/flip-linux/releases/tag/v1.0.0\"\n"
+        "      \"github\": \"https://github.com/akchansun/flip-linux/releases/tag/v1.0.0\",\n"
+        "      \"giteeAsset\": \"https://gitee.com/akcg/flip-linux/releases/download/v1.0.0/flip-linux-1.0.0-amd64.tar.gz\",\n"
+        "      \"githubAsset\": \"https://github.com/akchansun/flip-linux/releases/download/v1.0.0/flip-linux-1.0.0-amd64.tar.gz\"\n"
         "    }\n"
         "  }\n"
         "}\n");
@@ -111,10 +114,26 @@ int runSelfTest()
     expect(parseLinuxRelease(sampleJson, &rel), "parse linux version.json");
     expect(rel.version == QStringLiteral("1.0.0"), "parsed linux version");
     expect(rel.downloadGitee.contains(QStringLiteral("gitee.com")), "parsed gitee url");
-    expect(preferredDownloadUrl(rel, true).contains(QStringLiteral("gitee.com")),
-           "china prefers gitee");
-    expect(preferredDownloadUrl(rel, false).contains(QStringLiteral("ak129.cn")),
-           "others prefer site");
+    expect(rel.giteeAsset.contains(QStringLiteral("amd64.tar.gz")), "parsed gitee asset");
+    expect(rel.githubAsset.contains(QStringLiteral("github.com")), "parsed github asset");
+    expect(forgeProbeUrl(rel.downloadGitee, rel.giteeAsset) == rel.giteeAsset,
+           "probe prefers gitee asset over page");
+    expect(forgeProbeUrl(rel.downloadGithub, QString()) == rel.downloadGithub,
+           "probe falls back to github page");
+    expect(probeHttpStatusOk(200) && probeHttpStatusOk(302), "2xx/3xx probe ok");
+    expect(!probeHttpStatusOk(404) && !probeHttpStatusOk(0), "404/0 probe not ok");
+    {
+        const QStringList chain = updateOpenUrlChain(rel, rel.giteeAsset);
+        expect(!chain.isEmpty() && chain.first() == rel.giteeAsset, "winner first in fallback chain");
+        expect(chain.contains(rel.githubAsset), "chain includes other forge");
+        expect(chain.contains(rel.downloadSite), "chain includes site");
+        expect(chain.size() == 3, "chain dedupes to winner, other forge, site");
+        const QStringList timeoutChain = updateOpenUrlChain(rel, QString());
+        expect(timeoutChain.first() == rel.giteeAsset, "empty winner still tries gitee then github then site");
+        expect(timeoutChain.size() == 3, "timeout chain has both forges and site");
+    }
+    expect(downloadProbeTimeoutMs() > 0 && downloadProbeTimeoutMs() < updateFeedTimeoutMs(),
+           "probe timeout shorter than feed timeout");
     expect(!parseLinuxRelease(QByteArrayLiteral("{not json"), &rel), "reject invalid json");
     expect(!parseLinuxRelease(QByteArrayLiteral("{\"macos\":{}}"), &rel), "reject missing linux");
     expect(updateFeedUrl().toString().contains(QStringLiteral("/flip/version.json")),
@@ -140,12 +159,14 @@ int runSelfTest()
     expect(I18n::t("app.name") == QStringLiteral("看图"), "zh app name");
     expect(I18n::t("tips.dontShow") == QStringLiteral("不再提示"), "zh dont show tips");
     expect(I18n::t("update.dont") == QStringLiteral("不更新"), "zh dont update");
+    expect(I18n::t("update.picking").contains(QStringLiteral("源")), "zh picking source");
     expect(I18n::t("about.body").arg(QStringLiteral(FLIP_VERSION)).contains(QStringLiteral("1.1.0")),
            "zh about shows version");
     I18n::setLang(I18n::Lang::En);
     expect(I18n::t("app.name") == QStringLiteral("Flip"), "en app name");
     expect(I18n::t("tips.dontShow") == QStringLiteral("Don't show again"), "en dont show tips");
     expect(I18n::t("update.later") == QStringLiteral("Later"), "en later");
+    expect(I18n::t("update.picking").contains(QStringLiteral("faster")), "en picking source");
 
     QTemporaryDir tmp;
     expect(tmp.isValid(), "temp dir");

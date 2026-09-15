@@ -1,11 +1,13 @@
 #include "LaunchPrompts.h"
 
+#include "DownloadRace.h"
 #include "AppInfo.h"
 #include "I18n.h"
 #include "LaunchSettings.h"
 #include "UpdateFeed.h"
 #include "VersionCompare.h"
 
+#include <QApplication>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -170,11 +172,28 @@ void showUpdateAvailableDialog(QWidget* parent, const LinuxRelease& rel)
     layout->addWidget(buttons);
 
     QObject::connect(laterBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    bool racing = false;
+    QObject::connect(&dialog, &QDialog::finished, &dialog, [&racing] {
+        if (!racing)
+            return;
+        racing = false;
+        QApplication::restoreOverrideCursor();
+    });
     QObject::connect(goBtn, &QPushButton::clicked, &dialog, [&] {
-        const QString url = preferredDownloadUrl(rel, preferChinaDownload());
-        if (!url.isEmpty())
-            QDesktopServices::openUrl(QUrl(url));
-        dialog.accept();
+        goBtn->setEnabled(false);
+        dontBtn->setEnabled(false);
+        goBtn->setText(I18n::t("update.picking"));
+        racing = true;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        auto* racer = new DownloadRacer(&dialog);
+        QObject::connect(racer, &DownloadRacer::finished, &dialog, [&dialog, rel](const QString& winner) {
+            for (const QString& url : updateOpenUrlChain(rel, winner)) {
+                if (QDesktopServices::openUrl(QUrl(url)))
+                    break;
+            }
+            dialog.accept();
+        });
+        racer->start(rel);
     });
     QObject::connect(dontBtn, &QPushButton::clicked, &dialog, [&] {
         QSettings settings;
